@@ -8,9 +8,10 @@ public class FirstPersonController : MonoBehaviour {
 	public float mouseSensitivity = 1f;
 	public float smoothRotation = 12f;
 	public float walkSpeed = 6f;
-	public float flightForce = 1f;
+	public float flightForce = 200f;
 	private float flightInputStr = 0f;
 	public float maxFlightSpeed = 100f;
+	public float gravity = 10f;
 
 	private float timeSinceLastAction = 0f;
 	private float timeToSelfCorrectRotation = 2f;
@@ -23,7 +24,7 @@ public class FirstPersonController : MonoBehaviour {
 	float yaw;
 	Transform cameraTransform;
 	Rigidbody rb;
-	private Transform planet;
+	[SerializeField] private Transform planet;
 	public bool rotaterb = false;
 	
 	
@@ -65,9 +66,7 @@ public class FirstPersonController : MonoBehaviour {
 		Vector3 targetMoveAmount = transform.TransformDirection(moveDir) * walkSpeed;
 		moveAmount = Vector3.SmoothDamp(moveAmount,targetMoveAmount,ref smoothMoveVelocity,.15f);
 		
-		if (Input.GetKey(KeyCode.Space)){
-            rb.AddForce((transform.position-ClosestPlanetPos()).normalized * flightForce);
-		}
+
 
 	}
 
@@ -79,8 +78,7 @@ public class FirstPersonController : MonoBehaviour {
 			flightInputStr -= Time.deltaTime * 4f;
 			timeSinceLastAction += Time.deltaTime;
 		}
-		rb.AddForce(cameraTransform.forward * flightInputStr * flightForce);
-		rb.velocity = Vector3.ClampMagnitude(rb.velocity, maxFlightSpeed);
+		flightInputStr = Mathf.Clamp(flightInputStr, 0f, 20f);
 
 		if (timeSinceLastAction > timeToSelfCorrectRotation){
 			Quaternion targetRotation = Quaternion.FromToRotation(transform.up, Vector3.up) * rb.rotation;
@@ -107,7 +105,7 @@ public class FirstPersonController : MonoBehaviour {
 		if (planet != null){
 
 			Vector3 forceDir = (planet.position - transform.position).normalized;
-			Vector3 acceleration = forceDir * 9.81f;
+			Vector3 acceleration = forceDir * gravity * Time.fixedDeltaTime;
 			rb.AddForce(acceleration, ForceMode.Acceleration);
 
 			Vector3 gravityUp = -acceleration.normalized;
@@ -116,14 +114,19 @@ public class FirstPersonController : MonoBehaviour {
 			rb.rotation = Quaternion.Lerp(rb.rotation, targetRotation, Time.fixedDeltaTime * smoothRotation);
 
 			// rb.rotation = Quaternion.FromToRotation(transform.up, gravityUp) * rb.rotation;
+			rb.MovePosition(rb.position + moveAmount * Time.fixedDeltaTime);
+		} else {
+			rb.AddForce(flightForce * flightInputStr * Time.fixedDeltaTime * cameraTransform.forward, ForceMode.Acceleration);
 		}
 
+		if (Input.GetKey(KeyCode.Space)){
+            rb.AddForce(flightForce * Time.fixedDeltaTime * (transform.position - ClosestPlanetPos()).normalized, ForceMode.Acceleration);
+		}
 
-		rb.MovePosition(rb.position + moveAmount * Time.fixedDeltaTime);
 	}
 
 	void OnTriggerEnter(Collider other){
-		if (other.tag == "Planet"){
+		if (other.tag == "Atmosphere"){
 			other.gameObject.GetComponentInParent<Planet>().EnterAtmosphere();
 			planet = other.gameObject.transform.parent;
 
@@ -131,7 +134,7 @@ public class FirstPersonController : MonoBehaviour {
 		}
 	}
 	void OnTriggerExit(Collider other){
-		if (other.tag == "Planet"){
+		if (other.tag == "Atmosphere"){
 			other.gameObject.GetComponentInParent<Planet>().ExitAtmosphere();
 			planet = null;
 		}
