@@ -10,12 +10,11 @@ public class FirstPersonController : MonoBehaviour {
 	public float walkSpeed = 6f;
 	public float flightForce = 200f;
 	private float flightInputStr = 0f;
-	public float maxFlightSpeed = 100f;
 	public float gravity = 10f;
 
 	private float timeSinceLastAction = 0f;
-	private float timeToSelfCorrectRotation = 2f;
-	public LayerMask groundedMask;
+	private readonly float timeToSelfCorrectRotation = 2f;
+	bool inOrbit = false;
 	
 	// System vars
 	Vector3 moveAmount;
@@ -45,19 +44,12 @@ public class FirstPersonController : MonoBehaviour {
 		// Look rotation:
 		yaw = Input.GetAxis("Mouse X") * mouseSensitivity;
 		pitch += Input.GetAxis("Mouse Y") * mouseSensitivity;
-		pitch = Mathf.Clamp(pitch,-60,60);
+		pitch = Mathf.Clamp(pitch,-80,80);
 
 		cameraTransform.localEulerAngles = Vector3.left * pitch;
-		if (!rotaterb){
-			transform.Rotate(Vector3.up * yaw, Space.Self);
-		} else{
-			rb.MoveRotation(rb.rotation * Quaternion.Euler(Vector3.up * yaw));
-		}
+		rb.MoveRotation(rb.rotation * Quaternion.Euler(Vector3.up * yaw));
 		
-		if (planet == null){
-			JetMovement();
-			return;
-		}
+		JetMovement();
 		// Calculate movement:
 		float inputX = Input.GetAxisRaw("Horizontal");
 		float inputY = Input.GetAxisRaw("Vertical");
@@ -81,6 +73,7 @@ public class FirstPersonController : MonoBehaviour {
 		flightInputStr = Mathf.Clamp(flightInputStr, 0f, 20f);
 
 		if (timeSinceLastAction > timeToSelfCorrectRotation){
+			if (inOrbit) return;
 			Quaternion targetRotation = Quaternion.FromToRotation(transform.up, Vector3.up) * rb.rotation;
 			rb.rotation = Quaternion.Lerp(rb.rotation, targetRotation, Time.fixedDeltaTime);
 		}
@@ -88,18 +81,6 @@ public class FirstPersonController : MonoBehaviour {
 
 	}
 
-	private Vector3 ClosestPlanetPos(){
-		Vector3 closestPlanetPos = Vector3.zero;
-		float closestPlanetDist = Mathf.Infinity;
-		foreach (Planet planet in FindObjectsOfType<Planet>()){
-			float dist = Vector3.Distance(transform.position, planet.transform.position);
-			if (dist < closestPlanetDist){
-				closestPlanetDist = dist;
-				closestPlanetPos = planet.transform.position;
-			}
-		}
-		return closestPlanetPos;
-	}
 	
 	void FixedUpdate() {
 		if (planet != null){
@@ -113,15 +94,13 @@ public class FirstPersonController : MonoBehaviour {
 			Quaternion targetRotation = Quaternion.FromToRotation(transform.up, gravityUp) * rb.rotation;
 			rb.rotation = Quaternion.Lerp(rb.rotation, targetRotation, Time.fixedDeltaTime * smoothRotation);
 
-			// rb.rotation = Quaternion.FromToRotation(transform.up, gravityUp) * rb.rotation;
-			rb.MovePosition(rb.position + moveAmount * Time.fixedDeltaTime);
-		} else {
-			rb.AddForce(flightForce * flightInputStr * Time.fixedDeltaTime * cameraTransform.forward, ForceMode.Acceleration);
 		}
-
 		if (Input.GetKey(KeyCode.Space)){
-            rb.AddForce(flightForce * Time.fixedDeltaTime * (transform.position - ClosestPlanetPos()).normalized, ForceMode.Acceleration);
-		}
+			rb.AddForce(flightForce * flightInputStr * Time.fixedDeltaTime * cameraTransform.forward, ForceMode.Acceleration);
+		}		
+		rb.MovePosition(rb.position + moveAmount * Time.fixedDeltaTime);
+
+
 
 	}
 
@@ -131,12 +110,14 @@ public class FirstPersonController : MonoBehaviour {
 			planet = other.gameObject.transform.parent;
 
 			rb.velocity = Vector3.SmoothDamp(rb.velocity, Vector3.zero, ref smoothMoveVelocity, .2f);
+			inOrbit = true;
 		}
 	}
 	void OnTriggerExit(Collider other){
 		if (other.tag == "Atmosphere"){
 			other.gameObject.GetComponentInParent<Planet>().ExitAtmosphere();
 			planet = null;
+			inOrbit = false;
 		}
 	}
 }
